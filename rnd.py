@@ -1,189 +1,206 @@
-# from flask import Flask, jsonify, request
-# import math
+
+# from flask import Flask, render_template, request, redirect, url_for
+# import os
+# from gen_htp import Gen_HTP  # Import the Gen_HTP function
 
 # app = Flask(__name__)
 
-# # Placeholder classes for geometric entities (replace with actual geometry library classes)
-# class Point:
-#     def __init__(self, x, y, z=0):
-#         self.x = x
-#         self.y = y
-#         self.z = z
+# @app.route('/')
+# def index():
+#     return render_template('index.html')
 
-#     def distance(self, other):
-#         return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2 + (self.z - other.z)**2)
+# @app.route('/generate', methods=['POST'])
+# def generate():
+#     # Retrieve form data
+#     slice_height = float(request.form['slice_height'])
+#     segm_length = float(request.form['segm_length'])
+#     store_path = request.form['store_path']
 
-#     def is_equal(self, other, tolerance=1e-3):
-#         return self.distance(other) < tolerance
+#     # Mock data for `mvFeatureData` (replace with actual data structure)
+#     mvFeatureData = []  # Placeholder; add your shape data here
 
-#     def __repr__(self):
-#         return f"Point({self.x}, {self.y}, {self.z})"
+#     # Generate HTP using the provided parameters
+#     Gen_HTP(slice_height, segm_length, mvFeatureData, store_path)
 
-
-# class Edge:
-#     def __init__(self, p1, p2):
-#         self.p1 = p1
-#         self.p2 = p2
-
-#     def reversed(self):
-#         return Edge(self.p2, self.p1)
-
-#     def __repr__(self):
-#         return f"Edge({self.p1}, {self.p2})"
-
-
-# # Function 1: EdgesToWire
-# @app.route('/edges_to_wire', methods=['POST'])
-# def edges_to_wire():
-#     data = request.json
-#     vInputEdges = data["input_edges"]
-#     vFacesInputOrder = data["face_order"]
-
-#     vEdgesOfWire = [vInputEdges[0]]
-#     vSortedFacesOrder = [vFacesInputOrder[0]]
-#     nEdges = len(vInputEdges)
-#     bEdgeReversed = False
-
-#     for i in range(nEdges):
-#         iEdge = vInputEdges[i]
-#         iPnt2 = iEdge.p2 if not bEdgeReversed else iEdge.p1
-
-#         for j in range(i + 1, nEdges):
-#             jEdge = vInputEdges[j]
-#             jPnt1 = jEdge.p1
-#             jPnt2 = jEdge.p2
-
-#             if iPnt2.is_equal(jPnt1):
-#                 vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
-#                 vEdgesOfWire.append(vInputEdges[i + 1])
-#                 vFacesInputOrder[i + 1], vFacesInputOrder[j] = vFacesInputOrder[j], vFacesInputOrder[i + 1]
-#                 vSortedFacesOrder.append(vFacesInputOrder[i + 1])
-#                 bEdgeReversed = False
-#                 break
-#             elif iPnt2.is_equal(jPnt2):
-#                 vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
-#                 vEdgesOfWire.append(vInputEdges[i + 1])
-#                 vFacesInputOrder[i + 1], vFacesInputOrder[j] = vFacesInputOrder[j], vFacesInputOrder[i + 1]
-#                 vSortedFacesOrder.append(vFacesInputOrder[i + 1])
-#                 bEdgeReversed = True
-#                 break
-
-#     return jsonify({
-#         "ordered_edges": vEdgesOfWire,
-#         "sorted_faces_order": vSortedFacesOrder
-#     })
-
-# # # Example placeholder for Wire creation using a CAD library:
-# # wire = BRepBuilderAPI_MakeWire()
-# # for edge in vEdgesOfWire:
-# #     wire.Add(edge)
-
-# # Function 2: FindStart
-# @app.route('/find_start', methods=['POST'])
-# def find_start():
-#     data = request.json
-#     vInputEdges = data["input_edges"]
-#     startPnt = Point(*data["start_point"])
-#     distance = 100000
-#     StartEdgeNo = 0
-
-#     for i, edge in enumerate(vInputEdges):
-#         dist1 = edge.p1.distance(startPnt)
-#         if dist1 < distance:
-#             StartEdgeNo = i
-#             distance = dist1
-
-#     vInputEdges[0], vInputEdges[StartEdgeNo] = vInputEdges[StartEdgeNo], vInputEdges[0]
-
-#     return jsonify({
-#         "ordered_edges": vInputEdges
-#     })
-
-
-# # Function 3: EdgesOrdering
-# @app.route('/edges_ordering', methods=['POST'])
-# def edges_ordering():
-#     data = request.json
-#     vInputEdges = data["input_edges"]
-#     vOrderedEdges = [vInputEdges[0]]
-#     nEdges = len(vInputEdges)
-#     bEdgeReversed = False
-
-#     for i in range(nEdges):
-#         iEdge = vInputEdges[i]
-#         iPnt2 = iEdge.p2 if not bEdgeReversed else iEdge.p1
-
-#         for j in range(i + 1, nEdges):
-#             jEdge = vInputEdges[j]
-#             jPnt1 = jEdge.p1
-#             jPnt2 = jEdge.p2
-
-#             if iPnt2.is_equal(jPnt1):
-#                 vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
-#                 vOrderedEdges.append(vInputEdges[i + 1])
-#                 bEdgeReversed = False
-#                 break
-#             elif iPnt2.is_equal(jPnt2):
-#                 vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
-#                 vOrderedEdges.append(vInputEdges[i + 1])
-#                 bEdgeReversed = True
-#                 break
-
-#     return jsonify({
-#         "ordered_edges": vOrderedEdges
-#     })
-
-
-# # Function 4: OrientLoop
-# @app.route('/orient_loop', methods=['POST'])
-# def orient_loop():
-#     data = request.json
-#     vOrderedEdges = data["ordered_edges"]
-#     dir_Orientation = Point(*data["orientation_dir"])
-#     nEdges = len(vOrderedEdges)
-#     vFirstVertices = [edge.p1 for edge in vOrderedEdges]
-#     vFirstVertices.append(vFirstVertices[0])
-
-#     Area = 0
-#     pnt0 = Point(0, 0, 0)
-#     for i in range(1, nEdges + 1):
-#         vec1 = Point(vFirstVertices[i - 1].x - pnt0.x, vFirstVertices[i - 1].y - pnt0.y)
-#         vec2 = Point(vFirstVertices[i].x - pnt0.x, vFirstVertices[i].y - pnt0.y)
-#         Area += (vec1.x * vec2.y - vec2.x * vec1.y)
-
-#     vOrientedEdges = vOrderedEdges if Area * dir_Orientation.z >= 0 else [edge.reversed() for edge in reversed(vOrderedEdges)]
-
-#     return jsonify({
-#         "oriented_edges": vOrientedEdges
-#     })
-
+#     return redirect(url_for('index'))
 
 # if __name__ == '__main__':
 #     app.run(debug=True)
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, send_from_directory, send_file, jsonify
 import os
-from gen_htp import Gen_HTP  # Import the Gen_HTP function
+import numpy as np
+import plotly.graph_objects as go
+import zipfile
+from OCC.Core.STEPControl import STEPControl_Reader
+from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh
+from OCC.Core.Bnd import Bnd_Box
+from OCC.Core.BRepBndLib import brepbndlib_Add
+from OCC.Core.TopExp import TopExp_Explorer
+from OCC.Core.TopAbs import TopAbs_FACE, TopAbs_EDGE
+
+# Importing from gen_htp.py
+from gen_htp import Gen_HTP, GeneratePoints, PrintPointsToFile, PrintHeightsToFile
 
 app = Flask(__name__)
 
+# Define where uploaded STEP files will be stored
+UPLOAD_FOLDER = 'uploads'
+OUTPUT_FOLDER = 'output'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {'step', 'stp'}
+
+# Ensure the folders exist
+for folder in [UPLOAD_FOLDER, OUTPUT_FOLDER]:
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+# Helper function to check file extension
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Route for the homepage
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/generate', methods=['POST'])
-def generate():
-    # Retrieve form data
-    slice_height = float(request.form['slice_height'])
-    segm_length = float(request.form['segm_length'])
-    store_path = request.form['store_path']
+# Route to handle file upload
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return 'No file part'
+    file = request.files['file']
+    if file.filename == '':
+        return 'No selected file'
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        # After saving, process the file
+        result = process_step_file(file_path, filename)
+        
+        return jsonify(result)
+    return 'Invalid file type'
 
-    # Mock data for `mvFeatureData` (replace with actual data structure)
-    mvFeatureData = []  # Placeholder; add your shape data here
+# Process the uploaded STEP file and generate toolpaths
+def process_step_file(file_path, filename):
+    # Read STEP file
+    step_reader = STEPControl_Reader()
+    step_reader.ReadFile(file_path)
+    step_reader.TransferRoots()
+    shape = step_reader.OneShape()
 
-    # Generate HTP using the provided parameters
+    # Mesh the shape
+    BRepMesh_IncrementalMesh(shape, 0.1)
+
+    # Get bounding box of the shape
+    bbox = Bnd_Box()
+    brepbndlib_Add(shape, bbox)
+    xmin, ymin, zmin, xmax, ymax, zmax = bbox.Get()
+
+    # Slice parameters
+    slice_height = 0.2  # Set slice height
+    segm_length = 10.0  # Set segment length
+
+    # Generate toolpaths
+    mvFeatureData = extract_features(shape)  # Extract feature data
+    store_path = app.config['OUTPUT_FOLDER']
+
+    # Call Gen_HTP to generate contours and heights
     Gen_HTP(slice_height, segm_length, mvFeatureData, store_path)
 
-    return redirect(url_for('index'))
+    # Create response
+    response = {
+        "message": "STEP file processed successfully",
+        "bounding_box": [xmin, ymin, zmin, xmax, ymax, zmax],
+        "filename": filename
+    }
+    return response
+
+# Function to extract features from the shape
+def extract_features(shape):
+    features = []
+
+    # Extract faces
+    explorer = TopExp_Explorer(shape, TopAbs_FACE)
+    while explorer.More():
+        face = explorer.Current()
+        # Get some properties (like area, vertices, etc.)
+        features.append(face)
+        explorer.Next()
+
+    # Extract edges (if necessary)
+    explorer_edge = TopExp_Explorer(shape, TopAbs_EDGE)
+    while explorer_edge.More():
+        edge = explorer_edge.Current()
+        features.append(edge)
+        explorer_edge.Next()
+
+    return features
+
+# Route to visualize the result
+@app.route('/visualize/<filename>')
+def visualize(filename):
+    output_dir = app.config['OUTPUT_FOLDER']
+    
+    # Load contours or points generated by Gen_HTP
+    points_file = os.path.join(output_dir, 'points.txt')  # Assuming points are saved as 'points.txt'
+    heights_file = os.path.join(output_dir, 'heights.txt')  # Assuming heights are saved as 'heights.txt'
+
+    if not os.path.exists(points_file):
+        return "No points file found"
+
+    # Load points from file
+    points = np.loadtxt(points_file)
+    x, y, z = points[:, 0], points[:, 1], points[:, 2]
+
+    # Create a 3D plot with the toolpaths
+    fig = go.Figure(data=[
+        go.Scatter3d(x=x, y=y, z=z, mode='lines', line=dict(width=2, color='blue'))
+    ])
+    
+    fig.update_layout(title="Generated Toolpaths", scene=dict(
+        xaxis_title='X',
+        yaxis_title='Y',
+        zaxis_title='Z'
+    ))
+
+    graph_div = fig.to_html(full_html=False)
+    
+    return render_template('visualize.html', graph_div=graph_div)
+
+# Route to download the output ZIP file
+@app.route('/download/<path:filename>', methods=['GET', 'POST'])
+def download(filename):
+    uploads = os.path.join(app.root_path, app.config['UPLOAD_FOLDER'])
+    return send_from_directory(directory=uploads, path=filename)
+
+# Function to compress output files into a ZIP for download
+def zip_folder(folder_path, output_zip):
+    with zipfile.ZipFile(output_zip, 'w') as zipf:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                zipf.write(os.path.join(root, file), os.path.relpath(os.path.join(root, file), folder_path))
+
+# Route to generate and download output ZIP
+@app.route('/download_output/<string:step_filename>')
+def download_output(step_filename):
+    step_file_path = os.path.join(app.config['UPLOAD_FOLDER'], step_filename)
+    
+    if not os.path.exists(step_file_path):
+        return 'File not found'
+    
+    output_dir = app.config['OUTPUT_FOLDER']  # Output directory from Gen_HTP
+    zip_output_path = os.path.join(app.config['UPLOAD_FOLDER'], 'htp_output.zip')
+    
+    # Create the ZIP file of the output
+    zip_folder(output_dir, zip_output_path)
+    
+    return send_file(zip_output_path, as_attachment=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
