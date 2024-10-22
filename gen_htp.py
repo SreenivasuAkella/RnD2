@@ -1,15 +1,12 @@
-from OCC.Core.BRep import BRep_Builder, BRepTools
-from OCC.Core.BRepBndLib import brepbndlib_Add
+from OCC.Core.BRep import BRep_Builder
 from OCC.Core.BRepAlgoAPI import BRepAlgoAPI_Section
-from OCC.Core.BOPAlgo import BOPAlgo_Operation
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopAbs import TopAbs_EDGE
-from OCC.Core.Bnd import Bnd_Box
+from OCC.Core.TopAbs import TopAbs_VERTEX
 from OCC.Core.gp import gp_Dir, gp_Pnt, gp_Vec
 from OCC.Core.Geom import Geom_Plane
-from OCC.Core.TopoDS import TopoDS_Compound, TopoDS_Edge, TopoDS_Shape
+from OCC.Core.TopoDS import TopoDS_Compound, TopoDS_Edge, TopoDS_Shape,TopoDS_Vertex
 from OCC.Core.BRep import BRep_Tool
-from OCC.Core.TopExp import TopExp
 from OCC.Core.BRepAdaptor import BRepAdaptor_Curve
 from OCC.Core.GCPnts import GCPnts_AbscissaPoint
 from OCC.Core.gp import gp_Pnt
@@ -43,49 +40,66 @@ class Edge:
 
     def __repr__(self):
         return f"Edge({self.p1}, {self.p2})"
-def edges_to_wire():
-    data = request.json
-    vInputEdges = data["input_edges"]
-    vFacesInputOrder = data["face_order"]
+# def edges_to_wire():
+#     data = request.json
+#     vInputEdges = data["input_edges"]
+#     vFacesInputOrder = data["face_order"]
 
-    vEdgesOfWire = [vInputEdges[0]]
-    vSortedFacesOrder = [vFacesInputOrder[0]]
-    nEdges = len(vInputEdges)
-    bEdgeReversed = False
+#     vEdgesOfWire = [vInputEdges[0]]
+#     vSortedFacesOrder = [vFacesInputOrder[0]]
+#     nEdges = len(vInputEdges)
+#     bEdgeReversed = False
 
-    for i in range(nEdges):
-        iEdge = vInputEdges[i]
-        iPnt2 = iEdge.p2 if not bEdgeReversed else iEdge.p1
+#     for i in range(nEdges):
+#         iEdge = vInputEdges[i]
+#         iPnt2 = iEdge.p2 if not bEdgeReversed else iEdge.p1
 
-        for j in range(i + 1, nEdges):
-            jEdge = vInputEdges[j]
-            jPnt1 = jEdge.p1
-            jPnt2 = jEdge.p2
+#         for j in range(i + 1, nEdges):
+#             jEdge = vInputEdges[j]
+#             jPnt1 = jEdge.p1
+#             jPnt2 = jEdge.p2
 
-            if iPnt2.is_equal(jPnt1):
-                vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
-                vEdgesOfWire.append(vInputEdges[i + 1])
-                vFacesInputOrder[i + 1], vFacesInputOrder[j] = vFacesInputOrder[j], vFacesInputOrder[i + 1]
-                vSortedFacesOrder.append(vFacesInputOrder[i + 1])
-                bEdgeReversed = False
-                break
-            elif iPnt2.is_equal(jPnt2):
-                vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
-                vEdgesOfWire.append(vInputEdges[i + 1])
-                vFacesInputOrder[i + 1], vFacesInputOrder[j] = vFacesInputOrder[j], vFacesInputOrder[i + 1]
-                vSortedFacesOrder.append(vFacesInputOrder[i + 1])
-                bEdgeReversed = True
-                break
+#             if iPnt2.is_equal(jPnt1):
+#                 vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
+#                 vEdgesOfWire.append(vInputEdges[i + 1])
+#                 vFacesInputOrder[i + 1], vFacesInputOrder[j] = vFacesInputOrder[j], vFacesInputOrder[i + 1]
+#                 vSortedFacesOrder.append(vFacesInputOrder[i + 1])
+#                 bEdgeReversed = False
+#                 break
+#             elif iPnt2.is_equal(jPnt2):
+#                 vInputEdges[i + 1], vInputEdges[j] = vInputEdges[j], vInputEdges[i + 1]
+#                 vEdgesOfWire.append(vInputEdges[i + 1])
+#                 vFacesInputOrder[i + 1], vFacesInputOrder[j] = vFacesInputOrder[j], vFacesInputOrder[i + 1]
+#                 vSortedFacesOrder.append(vFacesInputOrder[i + 1])
+#                 bEdgeReversed = True
+#                 break
 
-    return jsonify({
-        "ordered_edges": vEdgesOfWire,
-        "sorted_faces_order": vSortedFacesOrder
-    })
+#     return jsonify({
+#         "ordered_edges": vEdgesOfWire,
+#         "sorted_faces_order": vSortedFacesOrder
+#     })
+def get_edge_vertices(aEdge):
+    # Initialize an explorer to find vertices
+    explorer = TopExp_Explorer(aEdge, TopAbs_VERTEX)
+
+    # Get the first vertex
+    first_vertex = None
+    last_vertex = None
+    if explorer.More():
+        first_vertex = TopoDS_Vertex(explorer.Current())
+        explorer.Next()
+    
+    # Get the last vertex
+    while explorer.More():
+        last_vertex = TopoDS_Vertex(explorer.Current())
+        explorer.Next()
+    
+    return first_vertex, last_vertex
 
 def GeneratePoints(aEdge, vContPnts, startPnt, length):
     # Get the vertices of the edge
-    first_vertex = TopExp.FirstVertex(aEdge)
-    last_vertex = TopExp.LastVertex(aEdge)
+    first_vertex,last_vertex = get_edge_vertices(aEdge)
+     
 
     # Get the geometric points of the vertices
     pnt_f_vertex = BRep_Tool.Pnt(first_vertex)
@@ -147,17 +161,34 @@ def frange(start, stop, step):
 def FindStart(edges, ordered_edges, start_point):
     closest_edge = None
     closest_distance = float('inf')
+    
+    # Ensure start_point is a gp_Pnt (point with XYZ)
     start_point = gp_Pnt(0, 0, start_point.Z())
 
     # Find the edge closest to the start point
     for edge in edges:
-        # Get the vertices of the edge
-        first_vertex = BRep_Tool.FirstVertex(edge)
-        last_vertex = BRep_Tool.LastVertex(edge)
+        # Initialize an explorer to find vertices
+        explorer = TopExp_Explorer(edge, TopAbs_VERTEX)
+
+        # Get the first vertex
+        first_vertex = None
+        last_vertex = None
+        if explorer.More():
+            first_vertex = TopoDS_Vertex(explorer.Current())
+            explorer.Next()
+        
+        # Get the last vertex
+        while explorer.More():
+            last_vertex = TopoDS_Vertex(explorer.Current())
+            explorer.Next()
+
+        # Get the point coordinates from the vertices
+        first_vertex_point = BRep_Tool.Pnt(first_vertex)
+        last_vertex_point = BRep_Tool.Pnt(last_vertex)
 
         # Compute distances to the start point
-        distance_to_first = first_vertex.Distance(start_point)
-        distance_to_last = last_vertex.Distance(start_point)
+        distance_to_first = first_vertex_point.Distance(start_point)
+        distance_to_last = last_vertex_point.Distance(start_point)
 
         if distance_to_first < closest_distance:
             closest_distance = distance_to_first
