@@ -346,7 +346,7 @@ def EdgesOrdering(slice_edges, ordered_edges):
             ordered_edges.append(next_edge)  # Add the found edge to the ordered list
         else:
             break  # No more edges found, the loop is closed
-        print(ordered_edges)
+        # print(ordered_edges)
 
 
 #ordering the edges in correct orientation
@@ -458,11 +458,17 @@ def GeneratePoints(aEdge, vContPnts, startPnt, length):
 
     # Determine the direction based on distance to the start point
     if startPnt.Distance(pnt_f_vertex) < startPnt.Distance(pnt_l_vertex):
+        param=brep_first_param
+        pnt = brep_curve.Value(param)
+        vContPnts.append(pnt)  # Store gp_Pnt in the vContPnts list
         for i in range(1, n_points + 1):
             param = brep_first_param + (brep_last_param - brep_first_param) * (i / n_points)
             pnt = brep_curve.Value(param)
             vContPnts.append(pnt)  # Store gp_Pnt in the vContPnts list
     else:
+        param = brep_last_param
+        pnt = brep_curve.Value(param)
+        vContPnts.append(pnt)  # Store gp_Pnt in the vContPnts list
         for i in range(1, n_points + 1):
             param = brep_last_param - (brep_last_param - brep_first_param) * (i / n_points)
             pnt = brep_curve.Value(param)
@@ -866,6 +872,7 @@ def process_step_file(step_path):
         #stors edges as list
         edges=[]
         while exp.More():
+            #find no.of times while occurs =>no.of edges
             edge = topods.Edge(exp.Current())
             edges.append(edge)
             exp.Next()
