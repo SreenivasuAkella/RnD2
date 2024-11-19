@@ -2,9 +2,9 @@ from flask import Flask, request, render_template, redirect, url_for, send_from_
 import os
 import numpy as np
 import plotly.graph_objects as go
-import math
 import zipfile
 import io
+from flask import make_response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
@@ -21,7 +21,6 @@ from OCC.Core.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
 from OCC.Core.BRepAlgoAPI import BRepAlgoAPI_Section
 from OCC.Core.GeomLProp import GeomLProp_SLProps
 from OCC.Core.GeomLib import GeomLib_Tool
-from OCC.Core.GeomAPI import GeomAPI_IntCS, GeomAPI_ProjectPointOnSurf
 from OCC.Core.TopoDS import topods, TopoDS_Shape, TopoDS_Face
 from OCC.Core.Geom import Geom_Curve, Geom_Plane
 from OCC.Core.Bnd import Bnd_Box
@@ -35,8 +34,6 @@ from OCC.Core.StlAPI import StlAPI_Writer
 from OCC.Core.TopExp import TopExp_Explorer
 from OCC.Core.TopoDS import TopoDS_Vertex, TopoDS_Edge
 from OCC.Core.TopAbs import TopAbs_VERTEX
-# from OCC.Core.Standard import Standard_Boolean
-from gen_htp import FindStart
 from OCC.Core.TopExp import TopExp_Explorer, topexp
 from OCC.Core.TopAbs import TopAbs_VERTEX, TopAbs_EDGE
 from OCC.Core.BRepMesh import BRepMesh_IncrementalMesh 
@@ -83,7 +80,7 @@ date_time=str(datetime.now().strftime("%Y-%m-%d %H-%M-%S"))
 @app.route('/')
 def index():
     return render_template('landing.html')
-
+BASE_PATH="./"
 #initializing user email for creating folder
 email=str()
 name=str()
@@ -94,9 +91,13 @@ def back():
     message='Welcome '+name
     return render_template('index.html', message=message)
 
-@app.route('/signin')
-def log():
-    return render_template('login.html')
+@app.route('/login')
+def login():
+    response = make_response(render_template('login.html'))
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 sspiral=np.empty((2,3))
 scontour=np.empty((2,3))
@@ -104,8 +105,8 @@ scontour=np.empty((2,3))
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global email
-    
+    global email,dz
+    global scontour, sspiral
     # Check if file is part of the request
     if 'file' not in request.files:
         return redirect(request.url)
@@ -117,25 +118,27 @@ def upload_file():
     # Proceed if the file is allowed (STEP or STP format)
     if file and allowed_file(file.filename):
         filename = email[:email.index('@')]
-        step_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        step_path = app.config['UPLOAD_FOLDER']+'/' +filename
         file.save(step_path)
         
         # Generate a unique timestamp for each upload
-        date_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        date_time = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
         
         # Correct directory paths using os.path.join
         global contour_folder, spiral_folder
-        contour_folder = 'E:/RnD2/IncrementalForming1/users/' +email+  '/Contour_' + date_time
-        spiral_folder =  app.config['USER_FOLDER'] +  '/Spiral' + date_time
-        print(contour_folder)
-        print(spiral_folder)
-        # Create the folders if they don't exist
+        contour_folder = BASE_PATH+'/users/' +email+  '/Contour_' + date_time
+        spiral_folder =  './users/' +email+  '/Spiral_' + date_time
+        # print(contour_folder)
+        # print(spiral_folder)
+        # # Create the folders if they don't exist
         os.makedirs(contour_folder, exist_ok=True)
         os.makedirs(spiral_folder, exist_ok=True)
         
         # User-provided inputs
         TD1 = request.form['tool_dia']
         Feed = request.form['feedrate']
+        dz=request.form['incremental_depth']
+        dz=float(dz)
         cnc = request.form['cnc']
         
         # Load STEP file
@@ -145,13 +148,10 @@ def upload_file():
         
         # Convert STEP to STL
         stl_filename = convert_step_to_stl(step_path, shape)
-        
-        # Define paths for toolpath files within the created folders
         pnt_contour_path =contour_folder + "/pntContour.txt"
         n_contour_path = contour_folder + "/nContour.txt"
         pnt_spiral_path = spiral_folder+ "/pntSpiral.txt"
         n_spiral_path = spiral_folder+ "/nSpiral.txt"
-        print(pnt_contour_path)
         # Process STEP file to generate required files
         process_step_file(step_path, contour_folder, spiral_folder)
 
@@ -159,9 +159,9 @@ def upload_file():
         gen_toolpath(pnt_contour_path, n_contour_path, TD1, Feed, cnc, 'contourSPIF_', contour_folder)
         gen_toolpath(pnt_spiral_path, n_spiral_path, TD1, Feed, cnc, 'spiralSPIF_', spiral_folder)
         
-        global scontour, sspiral
-        contour_html_path ="E:/RnD2/IncrementalForming1/static/pnt.html"
-        spiral_html_path = "E:/RnD2/IncrementalForming1/static/spnt.html"
+        
+        contour_html_path =BASE_PATH+"static/pnt.html"
+        spiral_html_path = BASE_PATH+"static/spnt.html"
         
         # Generate plots for the contour and spiral trajectories
         scontour = plot(pnt_contour_path, contour_html_path, 'Contour Trajectory')
@@ -185,11 +185,6 @@ def create_subfolder(folder_name):
     os.makedirs(folder_path, exist_ok=True)
 
     return folder_name
-
-@app.route('/loginpage')
-def login_page():
-    return render_template('login.html')
-
 @app.route('/createaccount')
 def signin_page():
     return render_template('signup.html')
@@ -216,46 +211,72 @@ def signup():
         db.session.commit()
 
         # Create the user's folder
-        BASE_DIR = "E:/RnD2/IncrementalForming1/users"
+        BASE_DIR = BASE_PATH+"users"
         USER_FOLDER = os.path.join(BASE_DIR, email)
         app.config['USER_FOLDER'] = USER_FOLDER
         if not os.path.exists(USER_FOLDER):
             os.makedirs(USER_FOLDER)
-        # create_subfolder('Spiral_' + datetime.now().strftime("%Y-%m-%d %H-%M-%S"))
-        # create_subfolder('Contour_' + datetime.now().strftime("%Y-%m-%d %H-%M-%S"))
         
-        message = 'Welcome ' + name
-        return render_template('index.html', message=message)
+        # Redirect to login page after signup
+        return render_template('login.html', message="Signup successful! Please log in.")
     else:
         return render_template('signup.html', message="Check password requirements")
-@app.route('/signin', methods=['POST'])
+def no_cache(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
+
+@app.route('/signin', methods=['POST', 'GET'])
 def signin():
-    global name, email, USER_FOLDER
-    email = request.form['email']
-    password = request.form['password']
-    
-    user = User.query.filter_by(email=email).first()
-    
-    if user and check_password_hash(user.password, password):
-        name = user.first_name
-        session['user_email'] = email  # Store email in session
-        session['user_name'] = name  # Store user name in session
+    if request.method == 'POST':
+        global name, email, USER_FOLDER
+        email = request.form['email']
+        password = request.form['password']
         
-        # Set up user folder
-        BASE_DIR = "E:/RnD2/IncrementalForming1/users"
-        USER_FOLDER = os.path.join(BASE_DIR, email)
-        app.config['USER_FOLDER'] = USER_FOLDER
-        if not os.path.exists(USER_FOLDER):
-            os.makedirs(USER_FOLDER)
+        user = User.query.filter_by(email=email).first()
         
-        # create_subfolder('Contour_' + datetime.now().strftime("%Y-%m-%d %H-%M-%S"))
-        # create_subfolder('Spiral_' + datetime.now().strftime("%Y-%m-%d %H-%M-%S"))
-        
-        message = 'Welcome ' + name
-        return render_template('index.html', message=message)
+        if user and check_password_hash(user.password, password):
+            name = user.first_name
+            session['user_email'] = email  # Store email in session
+            session['user_name'] = name  # Store user name in session
+            
+            # Set up user folder
+            BASE_DIR = BASE_PATH+"users"
+            USER_FOLDER = os.path.join(BASE_DIR, email)
+            app.config['USER_FOLDER'] = USER_FOLDER
+            if not os.path.exists(USER_FOLDER):
+                os.makedirs(USER_FOLDER)
+            
+            # Redirect to the /home route after successful signin
+            return redirect(url_for('home'))
+        else:
+            message = 'Invalid email or password'
+            return render_template('login.html', message=message)
+    return render_template('login.html')
+
+
+@app.route('/home', methods=['GET'])
+def home():
+    # Check if the session is valid
+    if 'user_name' in session:
+        message = f'Welcome {session["user_name"]}'
+        response = make_response(render_template('index.html', message=message))
+        return no_cache(response)  # Apply no-cache headers
     else:
-        message = 'Invalid email or password'
-        return render_template('login.html', message=message)
+        return redirect(url_for('signin'))  # Redirect to login if session is invalid
+
+@app.route('/signout', methods=['GET', 'POST'])
+def signout():
+    if request.method == 'POST':
+        confirm = request.form.get('confirm')
+        if confirm == 'yes':
+            session.clear()  # Clear the user session
+            return redirect(url_for('login'))  # Redirect to the login page
+        else:
+            return redirect(url_for('home'))  # Redirect back to the home page
+    return render_template('home.html')  # Render the home page with the sign-out button
 
         
 #loading the .step file uploded by user
@@ -295,7 +316,9 @@ def FindStart(edges, ordered_edges, start_point):
         if(dist1 < distance):
             startEdgeNo = i
             distance = dist1
+            # print(startEdgeNo)
     aEdge = edges[startEdgeNo]
+    # print(startEdgeNo)
     edges[startEdgeNo] = edges[0]
     edges[0] = aEdge
 
@@ -986,6 +1009,37 @@ def process_step_file(step_path,contour_folder, spiral_folder):
     global ref_pnt2
     
     
+    # file_name1="pntContour.txt"
+    # #file path for stotring points(change the address to the address of your pc while locally hosting)
+    # file_path1= f"{contour_folder}/"+file_name1
+    # print(file_path1)
+    # global f_N1
+    # f_N1=file_path1
+    # #Opens a file to store points  
+    # f1=open(file_path1,"w")
+
+    # file_name2="nContour.txt"
+    # #file path for stotring normal(change the address to the address of your pc while locally hosting)
+    # file_path2=f"{contour_folder}/"+file_name2
+    # global f_N2
+    # f_N2=file_path2
+    # #Opens a file to store normals
+    # f2=open(file_path2,"w")
+    # file_name4="pntspiral.txt"
+    # #file path for stotring spiral points(change the address to the address of your pc while locally hosting)
+    # file_path4=f"{spiral_folder}/"+file_name4
+    # global f_N4
+    # f_N4=file_path4
+    # #opens a file to store spiral points
+    # f4=open(file_path4,'w')
+
+    # file_name5="nspiral.txt"
+    # #file path for stotring spiral normal(change the address to the address of your pc while locally hosting)
+    # file_path5=f"{spiral_folder}/"+file_name5
+    # global f_N5
+    # f_N5=file_path5
+    # #opens a file to store spiral normals
+    # f5=open(file_path5,'w')
     file_name1="pntContour.txt"
     #file path for stotring points(change the address to the address of your pc while locally hosting)
     file_path1= os.path.join(contour_folder, file_name1)
@@ -1047,7 +1101,7 @@ def process_step_file(step_path,contour_folder, spiral_folder):
     brepbndlib.Add(shape, box)
     z_min, z_max = box.CornerMin().Z(), box.CornerMax().Z()
     l=z_max-z_min
-    dz=0.5
+    # dz=0.5
     n=int(l/dz)
     
     #storing all points on slice, normals and points on spiral
@@ -1071,7 +1125,7 @@ def process_step_file(step_path,contour_folder, spiral_folder):
         
         #defining slicing plane
         plane = gp_Pln(gp_Ax3(gp_Pnt(0, 0, z), z_dir))
-        section = BRepAlgoAPI_Section(shape, plane, True)
+        section = BRepAlgoAPI_Section(shape, plane, False)
         section.ComputePCurveOn1(True)
         section.Approximation(True)
         section.Build()
@@ -1083,135 +1137,26 @@ def process_step_file(step_path,contour_folder, spiral_folder):
         edges=[]
         BRepMesh_IncrementalMesh(shape, 0.1)
         
-        with open("edge_details.txt", "a") as f:
-            f.write(f"Z value {z}\n")
-            # exp = TopExp_Explorer(shape, TopAbs_EDGE)
-            edge_count = 0
-            while exp.More():
-
+        # with open("edge_details.txt", "a") as f:
+        edge_count = 0
+        while exp.More():
                 #find no.of times while occurs =>no.of edges
-                edge = topods.Edge(exp.Current())
-                edge_count += 1
-                f.write(f"edge counting:{edge_count}")
-                # edge = topods.Edge(exp.Current())
-                f.write(f"\nEdge {edge_count}:\n")
-
-                # Find vertices at the ends of the edge
-                vertices = []
-                vertex_exp = TopExp_Explorer(edge, TopAbs_VERTEX)
-                while vertex_exp.More():
-                    vertex = topods.Vertex(vertex_exp.Current())
-                    point = BRep_Tool.Pnt(vertex)
-                    vertices.append(point)
-                    vertex_exp.Next()
-                
-                if len(vertices) >= 2:
-                    start_pnt, end_pnt = vertices[0], vertices[1]
-                    # Calculate edge length approximation (distance between endpoints)
-                    edge_length = math.sqrt(
-                        (start_pnt.X() - end_pnt.X())**2 +
-                        (start_pnt.Y() - end_pnt.Y())**2 +
-                        (start_pnt.Z() - end_pnt.Z())**2
-                    )
-                    
-                    # Write start, end, and length details
-                    f.write(f"  Start Point: ({start_pnt.X()}, {start_pnt.Y()}, {start_pnt.Z()})\n")
-                    f.write(f"  End Point: ({end_pnt.X()}, {end_pnt.Y()}, {end_pnt.Z()})\n")
-                    f.write(f"  Approximate Length: {edge_length}\n")
-                
-                else:
-                    f.write("  Edge does not have sufficient vertices to define length.\n")
-                # edges.append(edge)
-                # # Get the type of the curve
-                # curve_type = curve_adaptor.GetType()
-                # f.write(f"Edge added: {edge}\n")
-                # f.write(f"  Curve Type: {curve_type}\n")
-        
-                # Extract start and end points
-                # start_pnt = gp_Pnt()
-                # end_pnt = gp_Pnt()
-                # # BRep_Tool.Curve(edge, start_pnt, end_pnt)
-                # f.write(f"  Start Point: ({start_pnt.X()}, {start_pnt.Y()}, {start_pnt.Z()})\n")
-                # f.write(f"  End Point: ({end_pnt.X()}, {end_pnt.Y()}, {end_pnt.Z()})\n")
-                edges.append(edge)
-                exp.Next()
-            # f.write("\nAll edges collected:\n")
-            # for i, edge in enumerate(edges):
-            #     f.write(f"Edge {i+1}: {edge}\n")
+            edge = topods.Edge(exp.Current())
+            edge_count += 1
+            edges.append(edge)
+            exp.Next()
         #getting first edge
         slice_edges=stPnt(st_pnt, edges)
         #getting edges ordered
         ordered_edges=orientedEdges(slice_edges)
         #getting edges oriented to have same direction of loop area
-        edge_count2=0
-        for edge in ordered_edges:
-            with open("Ordered_edge_details.txt", "a") as f10:
-                # f9.write(f"edge counting:{edge_count}")
-                # edge = topods.Edge(exp.Current())
-                edge_count2+=1
-                f10.write(f"\nEdge {edge_count2}:\n")
-                vertices = []
-                vertex_exp = TopExp_Explorer(edge, TopAbs_VERTEX)
-                while vertex_exp.More():
-                    vertex = topods.Vertex(vertex_exp.Current())
-                    point = BRep_Tool.Pnt(vertex)
-                    vertices.append(point)
-                    vertex_exp.Next()
-                
-                if len(vertices) >= 2:
-                    start_pnt, end_pnt = vertices[0], vertices[1]
-                    # Calculate edge length approximation (distance between endpoints)
-                    edge_length = math.sqrt(
-                        (start_pnt.X() - end_pnt.X())**2 +
-                        (start_pnt.Y() - end_pnt.Y())**2 +
-                        (start_pnt.Z() - end_pnt.Z())**2
-                    )
-                    
-                    # Write start, end, and length details
-                    f10.write(f"  Start Point: ({start_pnt.X()}, {start_pnt.Y()}, {start_pnt.Z()})\n")
-                    f10.write(f"  End Point: ({end_pnt.X()}, {end_pnt.Y()}, {end_pnt.Z()})\n")
-                    f10.write(f"  Approximate Length: {edge_length}\n")
-                
-                else:
-                    f10.write("  Edge does not have sufficient vertices to define length.\n")
-
+        
         oriented_edges=orderedEdges(ordered_edges)
         norm_slice.clear()
         #storing list of points on edges on a single slice
         currpnt=[]
-        edge_count1=0
+        # edge_count1=0
         for edge in oriented_edges:
-            with open("Oriented_edge_details.txt", "a") as f9:
-                # f9.write(f"edge counting:{edge_count}")
-                # edge = topods.Edge(exp.Current())
-                edge_count1+=1
-                f9.write(f"\nEdge {edge_count1}:\n")
-                vertices = []
-                vertex_exp = TopExp_Explorer(edge, TopAbs_VERTEX)
-                while vertex_exp.More():
-                    vertex = topods.Vertex(vertex_exp.Current())
-                    point = BRep_Tool.Pnt(vertex)
-                    vertices.append(point)
-                    vertex_exp.Next()
-                
-                if len(vertices) >= 2:
-                    start_pnt, end_pnt = vertices[0], vertices[1]
-                    # Calculate edge length approximation (distance between endpoints)
-                    edge_length = math.sqrt(
-                        (start_pnt.X() - end_pnt.X())**2 +
-                        (start_pnt.Y() - end_pnt.Y())**2 +
-                        (start_pnt.Z() - end_pnt.Z())**2
-                    )
-                    
-                    # Write start, end, and length details
-                    f9.write(f"  Start Point: ({start_pnt.X()}, {start_pnt.Y()}, {start_pnt.Z()})\n")
-                    f9.write(f"  End Point: ({end_pnt.X()}, {end_pnt.Y()}, {end_pnt.Z()})\n")
-                    f9.write(f"  Approximate Length: {edge_length}\n")
-                
-                else:
-                    f9.write("  Edge does not have sufficient vertices to define length.\n")
-            # f9.close()
-
             pnts, pnts_gp = pointGen(edge, ref_pnt1)
             ref_pnt1=pnts[len(pnts)-1]
             currpnt.append(pnts)
@@ -1327,6 +1272,9 @@ def zip_folder(folder_path):
     memory_file.seek(0)
     return memory_file
 
+@app.route('/feedback', methods=['GET'])
+def feedback_form():
+    return render_template('feedback.html')
 @app.route('/comment', methods=['POST'])
 def feedback():
     global name
@@ -1340,13 +1288,26 @@ def feedback():
         db.session.add(new_feedback)
         db.session.commit()
 
-        return render_template('index.html', message2="Feedback submitted successfully", message='Welcome ' + name)
+        message = f'Welcome {session["user_name"]}'
+        return render_template('index.html', message=message)
     else:
         return "User not found", 404
+# @app.route('/comment', methods=['POST'])
+# def feedback():
+#     global name
+#     comment = request.form['comment']
+    
+#     # Find the user by their name (assuming it's unique)
+#     user = User.query.filter_by(first_name=name).first()
+#     if user:
+#         # Create a new Feedback entry with the user's name
+#         new_feedback = Feedback(user_id=user.id, user_name=user.first_name + " " + user.last_name, comment=comment)
+#         db.session.add(new_feedback)
+#         db.session.commit()
 
-
-
-
+#         return render_template('index.html', message2="Feedback submitted successfully", message='Welcome ' + name)
+#     else:
+#         return "User not found", 404
 #downloads file containing points
 @app.route('/download1')
 def download_file1():
@@ -1361,13 +1322,13 @@ def download_file2():
 
 @app.route('/simul1')
 def simulate_contour():
-    ht1="E:/RnD2/IncrementalForming1/static/simulContour.html"
+    ht1=BASE_PATH+"static/simulContour.html"
     simulate(scontour, ht1, 'Contour Trajectory')
     return render_template('simulate1.html')
 
 @app.route('/simul2')
 def simulate_spiral():
-    ht2="E:/RnD2/IncrementalForming1/static/simulSpiral.html"
+    ht2=BASE_PATH+"static/simulSpiral.html"
     simulate(sspiral, ht2, 'Spiral Trajectory')
     return render_template('simulate2.html')
 
@@ -1387,4 +1348,4 @@ if __name__ == '__main__':
     #creating the directories if already not created
     if not os.path.exists(UPLOAD_FOLDER):
         os.makedirs(UPLOAD_FOLDER)
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5005)
