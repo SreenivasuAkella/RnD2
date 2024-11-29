@@ -86,4 +86,4 @@ Access the app at [http://localhost:5000](http://localhost:5000).
 [MIT License](LICENSE)
 
 ## Contact
-For questions or issues, contact [Sreenivasu Akella And D.Mahesh ](mailto:210020001@iitdh.ac.in).
+For questions or issues, contact [Sreenivasu Akella ](mailto:210020001@iitdh.ac.in).
