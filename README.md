@@ -44,7 +44,7 @@ pip install -r requirements.txt
 ```
 
 ### 3. Configure PostgreSQL
-- Install PostgreSQL and ensure it runs on port **5433**.
+- Install PostgreSQL and ensure it runs on port **5432**.
 - Create a database named `toolpath_db`:
   ```sql
   CREATE DATABASE toolpath_db;
